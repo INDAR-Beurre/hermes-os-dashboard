@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { dashboardGetList } from '../api/hermes';
 import type { Session } from '../store/useStore';
-import { Icon } from '../components/Icons';
 
 export default function Sessions({ onSelectSession }: { onSelectSession: (s: Session) => void }) {
   const { connection } = useStore();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
 
   const loadSessions = useCallback(async () => {
     if (!connection) return;
@@ -31,7 +31,7 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
       }));
       setSessions(parsed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      setError(err instanceof Error ? err.message : 'Failed');
     } finally {
       setLoading(false);
     }
@@ -39,93 +39,150 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  const sources = [...new Set(sessions.map(s => s.source))];
   const filtered = sessions.filter(s => {
-    if (sourceFilter && s.source !== sourceFilter) return false;
-    if (search && !s.id.toLowerCase().includes(search.toLowerCase()) && !s.model.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return s.id.toLowerCase().includes(q) || s.model.toLowerCase().includes(q) || s.source.toLowerCase().includes(q);
   });
 
   if (!connection) return null;
+
+  const startNewChat = () => {
+    const newSession: Session = {
+      id: `mob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: 'New Chat',
+      model: 'default',
+      source: 'mobile',
+      messageCount: 0,
+      isActive: true,
+      preview: '',
+      startedAt: Date.now(),
+    };
+    onSelectSession(newSession);
+  };
 
   return (
     <div style={styles.page}>
       <div style={styles.topBar}>
         <div>
-          <h2 style={styles.pageTitle}>Sessions</h2>
-          <p style={styles.pageSubtitle}>{sessions.length} total</p>
+          <h2 style={styles.title}>Sessions</h2>
+          <p style={styles.subtitle}>{sessions.length} total</p>
         </div>
-        <div style={styles.actions}>
-          <div style={styles.searchBox}>
-            <Icon.Search size={14} />
-            <input
-              style={styles.searchInput}
-              placeholder="Search..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-          <select style={styles.select} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
-            <option value="">All sources</option>
-            {sources.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <button style={styles.refreshBtn} onClick={loadSessions}><Icon.Refresh size={14} /></button>
-        </div>
+        <button style={styles.newBtn} onClick={startNewChat}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </button>
       </div>
 
-      {error && <div style={styles.errorBanner}><Icon.AlertCircle size={14} /><span>{error}</span></div>}
+      <div style={styles.searchBox}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+        <input
+          style={styles.searchInput}
+          placeholder="Search sessions..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
 
-      <div style={styles.table}>
-        <div style={styles.tableHead}>
-          <span style={{ ...styles.th, flex: 2 }}>Session</span>
-          <span style={styles.th}>Source</span>
-          <span style={styles.th}>Model</span>
-          <span style={{ ...styles.th, textAlign: 'right' }}>Messages</span>
-          <span style={{ ...styles.th, textAlign: 'right' }}>Tokens</span>
-          <span style={styles.th}>Status</span>
-        </div>
-        {filtered.map((s, i) => {
-          const totalT = (s as any).input_tokens + (s as any).output_tokens || 0;
-          return (
-            <div key={s.id} style={{ ...styles.tr, animationDelay: `${i * 15}ms` }}>
-              <span style={{ ...styles.td, flex: 2 }}><span style={styles.sessionId}>#{s.id.slice(-8)}</span></span>
-              <span style={{ ...styles.td, textTransform: 'capitalize' }}>{s.source}</span>
-              <span style={{ ...styles.td, color: 'var(--gold)', fontFamily: 'monospace', fontSize: 12 }}>{s.model}</span>
-              <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.messageCount}</span>
-              <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{totalT.toLocaleString()}</span>
-              <span style={styles.td}>
-                {s.isActive
-                  ? <span style={styles.activeBadge}>active</span>
-                  : <span style={styles.endedBadge}>ended</span>
-                }
-              </span>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && <div style={styles.empty}>No sessions found</div>}
+      {error && <div style={styles.error}>{error}</div>}
+
+      <div style={styles.list}>
+        {loading ? (
+          <div style={styles.center}>Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div style={styles.center}>No sessions found</div>
+        ) : (
+          filtered.map((s, i) => (
+            <button
+              key={s.id}
+              onClick={() => onSelectSession(s)}
+              style={{ ...styles.sessionCard, animationDelay: `${i * 20}ms` }}
+            >
+              <div style={styles.sessionIcon}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+              </div>
+              <div style={styles.sessionInfo}>
+                <div style={styles.sessionTitle}>{s.title || `Session ${s.id.slice(-8)}`}</div>
+                <div style={styles.sessionMeta}>
+                  <span style={styles.modelTag}>{s.model}</span>
+                  <span style={styles.sourceText}>{s.source}</span>
+                  <span style={styles.msgCount}>{s.messageCount} msgs</span>
+                </div>
+              </div>
+              <div style={{
+                ...styles.statusDot,
+                background: s.isActive ? 'var(--success)' : 'var(--text-tertiary)',
+              }} />
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--background)', animation: 'fadeIn 300ms ease' },
-  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 16px', borderBottom: '1px solid var(--outline)', gap: 16 },
-  pageTitle: { fontSize: 26, fontWeight: 700, color: 'var(--textPrimary)' },
-  pageSubtitle: { fontSize: 13, color: 'var(--textSecondary)' },
-  actions: { display: 'flex', gap: 8, alignItems: 'center' },
-  searchBox: { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 12px' },
-  searchInput: { background: 'none', border: 'none', color: 'var(--textPrimary)', fontSize: 13, outline: 'none', width: 120 },
-  select: { background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 10px', color: 'var(--textPrimary)', fontSize: 13, outline: 'none' },
-  refreshBtn: { background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 10px', color: 'var(--textSecondary)', cursor: 'pointer', display: 'flex' },
-  errorBanner: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', fontSize: 13, color: 'var(--error)', margin: '0 24px' },
-  table: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', margin: '16px 24px' },
-  tableHead: { display: 'flex', padding: '10px 16px', background: 'rgba(212,175,55,0.04)', borderBottom: '1px solid var(--outline)' },
-  th: { fontSize: 11, fontWeight: 600, color: 'var(--textSecondary)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  tr: { display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--outline)', animation: 'fadeIn 300ms ease both', cursor: 'pointer', transition: 'background 150ms ease' },
-  td: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  sessionId: { fontFamily: 'monospace', color: 'var(--textTertiary)', marginRight: 8, fontSize: 12 },
-  activeBadge: { fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: 'var(--success)' },
-  endedBadge: { fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'var(--surfaceVariant)', color: 'var(--textTertiary)' },
-  empty: { padding: '32px 16px', textAlign: 'center', fontSize: 13, color: 'var(--textTertiary)' },
+  page: {
+    display: 'flex', flexDirection: 'column', height: '100dvh',
+    background: 'var(--background)', animation: 'fadeIn 300ms ease',
+  },
+  topBar: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '20px 16px 12px', borderBottom: '1px solid var(--outline)',
+  },
+  title: { fontSize: 28, fontWeight: 700, margin: 0, color: 'var(--textPrimary)' },
+  subtitle: { fontSize: 12, color: 'var(--textSecondary)', margin: '2px 0 0' },
+  newBtn: {
+    width: 40, height: 40, borderRadius: 'var(--radius-full)',
+    background: 'var(--gold)', color: '#000', border: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer',
+  },
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    margin: '12px 16px', padding: '10px 14px',
+    background: 'var(--surfaceVariant)', border: '1px solid var(--outline)',
+    borderRadius: 'var(--radius-full)',
+  },
+  searchInput: {
+    flex: 1, background: 'none', border: 'none', color: 'var(--textPrimary)',
+    fontSize: 14, outline: 'none',
+  },
+  error: {
+    margin: '0 16px 12px', padding: '10px 14px',
+    background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--error)', fontSize: 13,
+  },
+  list: { flex: 1, overflow: 'auto', padding: '8px 16px' },
+  center: {
+    textAlign: 'center', padding: '48px 16px', color: 'var(--text-tertiary)', fontSize: 14,
+  },
+  sessionCard: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    width: '100%', padding: '14px 16px', marginBottom: 8,
+    background: 'var(--surface)', border: '1px solid var(--outline)',
+    borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+    animation: 'fadeIn 300ms ease both', transition: 'all 150ms ease',
+    textAlign: 'left',
+  },
+  sessionIcon: {
+    width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+    background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.15)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  sessionInfo: { flex: 1, minWidth: 0 },
+  sessionTitle: {
+    fontSize: 14, fontWeight: 600, color: 'var(--textPrimary)',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  sessionMeta: { display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' },
+  modelTag: {
+    fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+    background: 'rgba(212,175,55,0.1)', color: 'var(--gold)',
+    fontFamily: 'monospace',
+  },
+  sourceText: { fontSize: 11, color: 'var(--text-tertiary)' },
+  msgCount: { fontSize: 11, color: 'var(--text-tertiary)' },
+  statusDot: {
+    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+  },
 };

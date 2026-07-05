@@ -1,169 +1,288 @@
 import { useState, useEffect } from 'react';
-import { dashboardGet, dashboardGetList } from '../api/hermes';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { Icon } from '../components/Icons';
+import { apiGet } from '../api/hermes';
+
+interface SystemStatus {
+  gateway_online?: boolean;
+  sessions_active?: number;
+  cron_jobs?: number;
+  memory_entries?: number;
+  skills_installed?: number;
+  mcp_servers?: number;
+  uptime?: number;
+  model?: string;
+  personality?: string;
+  platform?: string;
+}
 
 export default function Dashboard() {
   const { connection } = useStore();
-  const [stats, setStats] = useState<any>(null);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!connection) return;
-    Promise.all([
-      dashboardGet(connection, 'system/stats'),
-      dashboardGetList<any>(connection, 'sessions'),
-      dashboardGet<any>(connection, 'profiles'),
-    ]).then(([s, sess, prof]) => {
-      setStats(s);
-      setSessions((sess || []).slice(0, 8));
-      setProfiles(prof?.profiles || []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    loadStatus();
+    const interval = setInterval(loadStatus, 5000);
+    return () => clearInterval(interval);
   }, [connection]);
 
+  const loadStatus = async () => {
+    if (!connection) return;
+    try {
+      const data = await apiGet<SystemStatus>(connection, 'api/status');
+      setStatus(data);
+    } catch { /* silent */ }
+    setLoading(false);
+  };
+
   if (!connection) return null;
-  if (loading) return <div style={styles.center}><div style={styles.spinner} /></div>;
-
-  const memTotal = stats?.memory?.total || 1;
-  const memUsed = stats?.memory?.used || 0;
-  const memAvail = stats?.memory?.available || 0;
-  const memPct = Math.round((memUsed / memTotal) * 100);
-  const diskUsed = stats?.disk?.used || 0;
-  const diskTotal = stats?.disk?.total || 1;
-  const diskPct = Math.round((diskUsed / diskTotal) * 100);
-  const uptimeH = Math.round((stats?.uptime_seconds || 0) / 3600);
-
-  const totalTokens = sessions.reduce((acc, s) => acc + (s.input_tokens || 0) + (s.output_tokens || 0), 0);
-  const totalMessages = sessions.reduce((acc, s) => acc + (s.message_count || 0), 0);
 
   return (
     <div style={styles.page}>
-      <div style={styles.topBar}>
+      <div style={styles.header}>
         <div>
-          <h2 style={styles.pageTitle}>Dashboard</h2>
-          <p style={styles.pageSubtitle}>{stats?.hostname || 'Hermes'} · {stats?.os || 'Linux'}</p>
+          <h1 style={styles.title}>Hermes</h1>
+          <p style={styles.subtitle}>
+            {status?.model || 'Loading...'} · {status?.personality || '—'}
+          </p>
         </div>
-        <div style={styles.versionBadge}>v{stats?.hermes_version || '0.18.0'}</div>
-      </div>
-
-      <div style={styles.grid}>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>CPU</div>
-          <div style={styles.statValue}>{stats?.cpu_count || '—'} cores</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Memory</div>
-          <div style={styles.statValue}>{(memUsed / 1024 / 1024 / 1024).toFixed(1)}GB</div>
-          <div style={styles.statBar}><div style={{ ...styles.statFill, width: `${memPct}%`, background: memPct > 90 ? 'var(--error)' : 'var(--gold)' }} /></div>
-          <div style={styles.statSub}>{(memAvail / 1024 / 1024 / 1024).toFixed(1)}GB free</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Disk</div>
-          <div style={styles.statValue}>{(diskUsed / 1024 / 1024 / 1024).toFixed(0)}GB</div>
-          <div style={styles.statBar}><div style={{ ...styles.statFill, width: `${diskPct}%`, background: diskPct > 85 ? 'var(--error)' : 'var(--gold)' }} /></div>
-          <div style={styles.statSub}>{(diskTotal / 1024 / 1024 / 1024).toFixed(0)}GB total</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Uptime</div>
-          <div style={styles.statValue}>{uptimeH}h</div>
-          <div style={styles.statSub}>Python {stats?.python_version || '—'}</div>
+        <div style={styles.statusDot}>
+          <div style={{
+            ...styles.dotInner,
+            background: status?.gateway_online ? 'var(--success)' : 'var(--error)',
+          }} />
         </div>
       </div>
 
-      <div style={styles.row}>
-        <div style={styles.activityCard}>
-          <div style={styles.activityHeader}><Icon.Activity size={16} /><span style={styles.activityLabel}>Activity</span></div>
-          <div style={styles.activityGrid}>
-            <div style={styles.activityItem}><div style={styles.activityValue}>{sessions.length}</div><div style={styles.activityLabelSmall}>Sessions</div></div>
-            <div style={styles.activityItem}><div style={styles.activityValue}>{totalMessages.toLocaleString()}</div><div style={styles.activityLabelSmall}>Messages</div></div>
-            <div style={styles.activityItem}><div style={styles.activityValue}>{(totalTokens / 1000).toFixed(1)}K</div><div style={styles.activityLabelSmall}>Tokens</div></div>
-          </div>
-        </div>
+      <div style={styles.statsGrid}>
+        <StatCard label="Sessions" value={status?.sessions_active ?? 0} icon="chat" />
+        <StatCard label="Cron" value={status?.cron_jobs ?? 0} icon="clock" />
+        <StatCard label="Skills" value={status?.skills_installed ?? 0} icon="zap" />
+        <StatCard label="MCP" value={status?.mcp_servers ?? 0} icon="cpu" />
+      </div>
 
-        <div style={styles.profilesCard}>
-          <div style={styles.activityHeader}><Icon.Cpu size={16} /><span style={styles.activityLabel}>Profiles · {profiles.filter((p: any) => p.gateway_running).length} active</span></div>
-          <div style={styles.profileList}>
-            {profiles.slice(0, 5).map((p: any) => (
-              <div key={p.name} style={styles.profileRow}>
-                <span style={styles.profileName}>{p.name}</span>
-                <span style={styles.profileModel}>{p.model || 'default'}</span>
-                <span style={styles.profileSkills}>{p.skill_count} skills</span>
-              </div>
-            ))}
-          </div>
+      <div style={styles.section}>
+        <h2 style={styles.sectionTitle}>System</h2>
+        <div style={styles.card}>
+          <InfoRow label="Platform" value={status?.platform || '—'} />
+          <InfoRow label="Model" value={status?.model || '—'} />
+          <InfoRow label="Personality" value={status?.personality || '—'} />
+          <InfoRow label="Uptime" value={status?.uptime ? `${Math.floor(status.uptime / 3600)}h` : '—'} />
         </div>
       </div>
 
-      <div style={{ marginTop: 24 }}>
-        <div style={styles.sectionHeader}><Icon.MessageSquare size={16} /><span style={styles.sectionTitle}>Recent Sessions</span></div>
-        <div style={styles.table}>
-          <div style={styles.tableHead}>
-            <span style={{ ...styles.th, flex: 2 }}>Session</span>
-            <span style={styles.th}>Model</span>
-            <span style={{ ...styles.th, textAlign: 'right' }}>Messages</span>
-            <span style={{ ...styles.th, textAlign: 'right' }}>Tokens</span>
-            <span style={styles.th}>Ended</span>
-          </div>
-          {sessions.map((s, i) => {
-            const totalT = (s.input_tokens || 0) + (s.output_tokens || 0);
-            const date = s.ended_at ? new Date(s.ended_at * 1000).toLocaleDateString() : 'active';
-            return (
-              <div key={s.id} style={{ ...styles.tr, animationDelay: `${i * 20}ms` }}>
-                <span style={{ ...styles.td, flex: 2 }}><span style={styles.sessionId}>#{s.id.slice(-6)}</span><span style={styles.sessionSource}>{s.source}</span></span>
-                <span style={{ ...styles.td, color: 'var(--gold)', fontFamily: 'monospace', fontSize: 12 }}>{s.model || 'default'}</span>
-                <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.message_count || 0}</span>
-                <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{totalT.toLocaleString()}</span>
-                <span style={{ ...styles.td, color: 'var(--textTertiary)', fontSize: 12 }}>{date}</span>
-              </div>
-            );
-          })}
-          {sessions.length === 0 && <div style={styles.empty}>No sessions yet</div>}
+      <div style={styles.section}>
+        <h2 style={styles.sectionTitle}>Quick Actions</h2>
+        <div style={styles.actionsGrid}>
+          <ActionBtn label="New Chat" icon="plus" to="/sessions" navigate={navigate} />
+          <ActionBtn label="Cron Jobs" icon="clock" to="/cron" navigate={navigate} />
+          <ActionBtn label="Kanban" icon="kanban" to="/kanban" navigate={navigate} />
+          <ActionBtn label="Memory" icon="book" to="/memory" navigate={navigate} />
         </div>
       </div>
     </div>
   );
 }
 
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={styles.infoRow}>
+      <span style={styles.infoLabel}>{label}</span>
+      <span style={styles.infoValue}>{value}</span>
+    </div>
+  );
+}
+
+function ActionBtn({ label, icon, to, navigate }: { label: string; icon: string; to: string; navigate: (path: string) => void }) {
+  return (
+    <button onClick={() => navigate(to)} style={styles.actionBtn}>
+      <ActionIcon name={icon} />
+      <span style={styles.actionLabel}>{label}</span>
+    </button>
+  );
+}
+
+function StatCard({ label, value, icon }: { label: string; value: number; icon: string }) {
+  return (
+    <div style={styles.statCard}>
+      <div style={styles.statIcon}>
+        <StatIcon name={icon} />
+      </div>
+      <div>
+        <div style={styles.statValue}>{value}</div>
+        <div style={styles.statLabel}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function StatIcon({ name }: { name: string }) {
+  const c = 'var(--gold)';
+  const s = 20;
+  switch (name) {
+    case 'chat':
+      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>;
+    case 'clock':
+      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
+    case 'zap':
+      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>;
+    case 'cpu':
+      return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" /></svg>;
+    default:
+      return null;
+  }
+}
+
+function ActionIcon({ name }: { name: string }) {
+  const c = 'var(--gold)';
+  switch (name) {
+    case 'plus':
+      return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
+    case 'clock':
+      return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
+    case 'kanban':
+      return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="3" y="3" width="7" height="18" rx="1" /><rect x="14" y="3" width="7" height="10" rx="1" /></svg>;
+    case 'book':
+      return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M20 7H6.5A2.5 2.5 0 004 9.5v0" /><rect x="4" y="7" width="16" height="13" rx="2" /></svg>;
+    default:
+      return null;
+  }
+}
+
 const styles: Record<string, React.CSSProperties> = {
-  page: { display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--background)', animation: 'fadeIn 300ms ease', padding: '24px 28px', overflow: 'auto' },
-  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0 0 16px', borderBottom: '1px solid var(--outline)', marginBottom: 20 },
-  pageTitle: { fontSize: 26, fontWeight: 700, color: 'var(--textPrimary)', letterSpacing: '-0.01em' },
-  pageSubtitle: { fontSize: 13, color: 'var(--textSecondary)', marginTop: 4 },
-  versionBadge: { fontSize: 11, color: 'var(--gold)', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.15)', padding: '4px 10px', borderRadius: 'var(--radius-full)', fontFamily: 'monospace' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
-  statCard: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', padding: '16px 20px' },
-  statLabel: { fontSize: 11, fontWeight: 600, color: 'var(--textTertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 },
-  statValue: { fontSize: 22, fontWeight: 700, color: 'var(--textPrimary)', fontFamily: 'ui-monospace, monospace' },
-  statBar: { height: 3, background: 'var(--surfaceVariant)', borderRadius: 2, marginTop: 10, overflow: 'hidden' },
-  statFill: { height: '100%', borderRadius: 2, transition: 'width 500ms ease' },
-  statSub: { fontSize: 11, color: 'var(--textTertiary)', marginTop: 4 },
-  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 },
-  activityCard: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', padding: '16px 20px' },
-  activityHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
-  activityLabel: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--textSecondary)' },
-  activityLabelSmall: { fontSize: 10, color: 'var(--textTertiary)', marginTop: 2 },
-  activityGrid: { display: 'flex', gap: 24 },
-  activityItem: { textAlign: 'center' },
-  activityValue: { fontSize: 24, fontWeight: 700, color: 'var(--gold)', fontFamily: 'ui-monospace, monospace' },
-  profilesCard: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', padding: '16px 20px' },
-  profileList: { display: 'flex', flexDirection: 'column', gap: 6 },
-  profileRow: { display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0' },
-  profileName: { fontSize: 13, fontWeight: 500, color: 'var(--textPrimary)', minWidth: 100 },
-  profileModel: { fontSize: 12, color: 'var(--gold)', fontFamily: 'monospace', flex: 1 },
-  profileSkills: { fontSize: 11, color: 'var(--textTertiary)' },
-  sectionHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionTitle: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--textSecondary)' },
-  table: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' },
-  tableHead: { display: 'flex', padding: '10px 16px', background: 'rgba(212,175,55,0.04)', borderBottom: '1px solid var(--outline)' },
-  th: { fontSize: 11, fontWeight: 600, color: 'var(--textSecondary)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  tr: { display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--outline)', animation: 'fadeIn 300ms ease both' },
-  td: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  sessionId: { fontFamily: 'monospace', color: 'var(--textTertiary)', marginRight: 8, fontSize: 12 },
-  sessionSource: { color: 'var(--textPrimary)' },
-  empty: { padding: '24px 16px', textAlign: 'center', fontSize: 13, color: 'var(--textTertiary)' },
-  center: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' },
-  spinner: { width: 24, height: 24, border: '2px solid var(--outline)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  page: {
+    padding: '20px 16px 100px',
+    animation: 'fadeIn 300ms ease',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 34,
+    fontWeight: 700,
+    margin: '0 0 4px 0',
+    letterSpacing: '-0.02em',
+    background: 'linear-gradient(135deg, var(--gold), var(--goldBright))',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  },
+  subtitle: {
+    fontSize: 13,
+    color: 'var(--textSecondary)',
+    margin: 0,
+  },
+  statusDot: {
+    width: 36,
+    height: 36,
+    borderRadius: '50%',
+    background: 'rgba(212,175,55,0.08)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid rgba(212,175,55,0.15)',
+  },
+  dotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: '50%',
+    boxShadow: '0 0 12px currentColor',
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+    marginBottom: 24,
+  },
+  statCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    background: 'var(--surface)',
+    border: '1px solid var(--outline)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '16px',
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--surfaceVariant)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: 'var(--textPrimary)',
+    lineHeight: 1.2,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'var(--textSecondary)',
+    marginTop: 2,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--textSecondary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    marginBottom: 12,
+  },
+  card: {
+    background: 'var(--surface)',
+    border: '1px solid var(--outline)',
+    borderRadius: 'var(--radius-lg)',
+    overflow: 'hidden',
+  },
+  infoRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '14px 16px',
+    borderBottom: '1px solid var(--outline)',
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: 'var(--textSecondary)',
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: 500,
+    color: 'var(--textPrimary)',
+  },
+  actionsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+  },
+  actionBtn: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 8,
+    padding: '18px 12px',
+    background: 'var(--surface)',
+    border: '1px solid var(--outline)',
+    borderRadius: 'var(--radius-lg)',
+    cursor: 'pointer',
+    transition: 'all 200ms ease',
+  },
+  actionLabel: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--textSecondary)',
+  },
 };
