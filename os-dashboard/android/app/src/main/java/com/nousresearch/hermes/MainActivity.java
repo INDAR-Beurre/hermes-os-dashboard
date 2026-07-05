@@ -2,6 +2,7 @@ package com.nousresearch.hermes;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.view.View;
@@ -30,6 +31,8 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         setContentView(webView);
+
+        webView.setWebChromeClient(new WebChromeClient());
 
         // WebView settings
         android.webkit.WebSettings settings = webView.getSettings();
