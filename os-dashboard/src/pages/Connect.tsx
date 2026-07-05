@@ -1,18 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { ConnectionConfig } from '../api/hermes';
-import { apiGet } from '../api/hermes';
 
 interface ConnectProps {
   onConnect: (cfg: ConnectionConfig) => void;
-  existingConnection?: ConnectionConfig | null;
 }
 
-export default function Connect({ onConnect, existingConnection }: ConnectProps) {
-  const [label, setLabel] = useState(existingConnection?.label || '');
-  const [host, setHost] = useState(existingConnection?.host || '127.0.0.1');
-  const [port, setPort] = useState(existingConnection?.port?.toString() || '8642');
-  const [apiKey, setApiKey] = useState(existingConnection?.apiKey || '');
-  const [useHttps, setUseHttps] = useState(existingConnection?.useHttps || false);
+export default function Connect({ onConnect }: ConnectProps) {
+  const [username, setUsername] = useState('alex');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -22,23 +17,44 @@ export default function Connect({ onConnect, existingConnection }: ConnectProps)
     setLoading(true);
 
     try {
-      const cfg: ConnectionConfig = {
-        id: existingConnection?.id || crypto.randomUUID(),
-        label: label || `Hermes ${host}:${port}`,
-        host,
-        port: parseInt(port) || 8642,
-        apiKey,
-        useHttps,
-        dashboardProxied: false,
-      };
+      const res = await fetch('/auth/password-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'basic',
+          username,
+          password,
+        }),
+        credentials: 'include',
+      });
 
-      // Verify connection
-      await apiGet<{ status: string }>(cfg, 'health');
+      if (res.status === 401) {
+        setError('Invalid username or password');
+        setLoading(false);
+        return;
+      }
+      if (!res.ok) {
+        setError(`Login failed: HTTP ${res.status}`);
+        setLoading(false);
+        return;
+      }
 
-      onConnect(cfg);
+      const data = await res.json();
+      const landing = data.next || '/';
+
+      onConnect({
+        id: crypto.randomUUID(),
+        label: 'Hermes',
+        host: '127.0.0.1',
+        port: 9119,
+        apiKey: '',
+        useHttps: false,
+        dashboardProxied: true,
+        dashboardUsername: username,
+        dashboardPassword: password,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -58,72 +74,29 @@ export default function Connect({ onConnect, existingConnection }: ConnectProps)
           </svg>
         </div>
         <h1 style={styles.title}>Hermes OS</h1>
-        <p style={styles.subtitle}>Connect to your Hermes instance</p>
+        <p style={styles.subtitle}>Sign in to your dashboard</p>
       </div>
 
       <form onSubmit={handleConnect} style={styles.form}>
         <div style={styles.fieldGroup}>
-          <label style={styles.label}>Connection Label</label>
+          <label style={styles.label}>Username</label>
           <input
             style={styles.input}
             type="text"
-            placeholder="My Hermes"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoFocus
           />
-        </div>
-
-        <div style={styles.row}>
-          <div style={{ ...styles.fieldGroup, flex: 1 }}>
-            <label style={styles.label}>Host</label>
-            <input
-              style={styles.input}
-              type="text"
-              placeholder="127.0.0.1"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-            />
-          </div>
-          <div style={{ ...styles.fieldGroup, width: 100 }}>
-            <label style={styles.label}>Port</label>
-            <input
-              style={styles.input}
-              type="text"
-              placeholder="8642"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-            />
-          </div>
         </div>
 
         <div style={styles.fieldGroup}>
-          <label style={styles.label}>API Key</label>
+          <label style={styles.label}>Password</label>
           <input
             style={styles.input}
             type="password"
-            placeholder="hermes-..."
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
-        </div>
-
-        <div style={styles.toggleRow}>
-          <label style={styles.label}>Use HTTPS</label>
-          <button
-            type="button"
-            style={{
-              ...styles.toggle,
-              background: useHttps ? 'var(--gold)' : 'transparent',
-              borderColor: useHttps ? 'var(--gold)' : 'var(--outline)',
-            }}
-            onClick={() => setUseHttps(!useHttps)}
-          >
-            <div style={{
-              ...styles.toggleDot,
-              transform: useHttps ? 'translateX(16px)' : 'translateX(0)',
-            }} />
-          </button>
         </div>
 
         {error && (
@@ -134,23 +107,14 @@ export default function Connect({ onConnect, existingConnection }: ConnectProps)
 
         <button
           type="submit"
-          disabled={loading || !apiKey.trim()}
+          disabled={loading}
           style={{
             ...styles.button,
-            opacity: loading || !apiKey.trim() ? 0.5 : 1,
+            opacity: loading ? 0.5 : 1,
           }}
         >
-          {loading ? (
-            <span style={styles.spinner} />
-          ) : (
-            'Connect'
-          )}
+          {loading ? 'Signing in...' : 'Sign In'}
         </button>
-
-        <p style={styles.hint}>
-          Default: <code style={styles.code}>http://127.0.0.1:8642</code>
-          {' · '}Dashboard on <code style={styles.code}>9119</code>
-        </p>
       </form>
     </div>
   );
@@ -216,10 +180,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
   },
-  row: {
-    display: 'flex',
-    gap: 12,
-  },
   label: {
     fontSize: 12,
     fontWeight: 500,
@@ -237,33 +197,6 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     transition: 'border-color 200ms ease',
     width: '100%',
-  },
-  toggleRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 0',
-  },
-  toggle: {
-    width: 44,
-    height: 26,
-    borderRadius: 13,
-    border: '2px solid var(--outline)',
-    cursor: 'pointer',
-    position: 'relative',
-    transition: 'all 200ms ease',
-    padding: 0,
-  },
-  toggleDot: {
-    position: 'absolute',
-    top: 1,
-    left: 1,
-    width: 20,
-    height: 20,
-    borderRadius: '50%',
-    background: 'var(--gold)',
-    transition: 'transform 200ms ease',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
   },
   errorBox: {
     background: 'rgba(239,68,68,0.1)',
@@ -290,48 +223,4 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     minHeight: 48,
   },
-  hint: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: 'var(--textTertiary)',
-    margin: 0,
-  },
-  code: {
-    background: 'var(--surfaceVariant)',
-    padding: '2px 6px',
-    borderRadius: 4,
-    fontSize: 11,
-    fontFamily: 'monospace',
-  },
-  spinner: {
-    display: 'inline-block',
-    width: 18,
-    height: 18,
-    border: '2px solid rgba(0,0,0,0.2)',
-    borderTopColor: '#000',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
 };
-
-// Inject spin animation
-if (typeof document !== 'undefined' && !document.getElementById('hermes-animations')) {
-  const style = document.createElement('style');
-  style.id = 'hermes-animations';
-  style.textContent = `
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse {
-      0%, 100% { opacity: 0.5; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.1); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(-12px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-  `;
-  document.head.appendChild(style);
-}

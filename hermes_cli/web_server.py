@@ -13616,7 +13616,7 @@ def mount_spa(application: FastAPI):
                 css = css.replace(f"url('{asset_dir}", f"url('{prefix}{asset_dir}")
         return Response(content=css, media_type="text/css")
 
-    application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
+    app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
     # OS Dashboard — standalone agentic OS control panel
     OS_DASHBOARD_DIST = Path(__file__).parent / "os_dashboard_dist"
@@ -13657,7 +13657,7 @@ HERMES_HOME_PATH = get_hermes_home()
 KANBAN_DB_PATH = HERMES_HOME_PATH / "kanban.db"
 
 
-@application.get("/api/kanban")
+@app.get("/api/kanban")
 async def get_kanban_tasks():
     """Read kanban.db and return task list for the OS dashboard."""
     import sqlite3

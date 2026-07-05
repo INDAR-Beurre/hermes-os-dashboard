@@ -1,0 +1,4 @@
+hermes-os-debug.apk
+android/app/build/
+android/.gradle/
+gradle/wrapper/gradle-wrapper.jar

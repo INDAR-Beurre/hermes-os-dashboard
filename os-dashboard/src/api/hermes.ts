@@ -101,7 +101,11 @@ export async function apiDelete(
 
 // ── Dashboard auth ──────────────────────────────────────────────
 
+const isDev = typeof window !== 'undefined' && window.location.port === '5173';
+
 async function getDashboardBase(cfg: ConnectionConfig): Promise<string> {
+  // Vite dev mode: use relative paths so the proxy (/api -> 9119) handles it
+  if (isDev) return '';
   const scheme = cfg.useHttps ? 'https' : 'http';
   const port = cfg.dashboardPortOverride ?? (cfg.useHttps ? cfg.port : 9119);
   let base = `${scheme}://${cfg.host}:${port}`;
@@ -111,42 +115,9 @@ async function getDashboardBase(cfg: ConnectionConfig): Promise<string> {
   return base;
 }
 
-async function getDashboardHeaders(cfg: ConnectionConfig): Promise<HeadersInit> {
-  if (cfg.dashboardProxied) return { 'Content-Type': 'application/json' };
-
-  if (cfg.dashboardUsername && cfg.dashboardPassword) {
-    const base = await getDashboardBase(cfg);
-    const res = await fetch(`${base}/auth/password-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: 'basic',
-        username: cfg.dashboardUsername,
-        password: cfg.dashboardPassword,
-      }),
-    });
-    if (res.status === 401) throw new Error('Dashboard login failed');
-    if (!res.ok) throw new Error(`Dashboard login: HTTP ${res.status}`);
-
-    const setCookie = res.headers.get('set-cookie') || '';
-    const match = setCookie.match(
-      /((?:__Host-|__Secure-)?hermes_session_at)=([^;,\s]+)/,
-    );
-    if (!match) throw new Error('No session cookie in login response');
-    const cookie = `${match[1]}=${match[2]}`;
-    return { Cookie: cookie, 'Content-Type': 'application/json' };
-  }
-
-  const base = await getDashboardBase(cfg);
-  const res = await fetch(base + '/');
-  if (res.status !== 200) throw new Error('Dashboard not reachable');
-  const html = await res.text();
-  const tokenMatch = html.match(/window\.__HERMES_SESSION_TOKEN__="([^"]+)";/);
-  if (!tokenMatch) throw new Error('No session token in dashboard');
-  return {
-    'X-Hermes-Session-Token': tokenMatch[1],
-    'Content-Type': 'application/json',
-  };
+async function getDashboardHeaders(_cfg: ConnectionConfig): Promise<HeadersInit> {
+  // Cookie auth (browser handles it via credentials: 'include')
+  return { 'Content-Type': 'application/json' };
 }
 
 async function dashboardFetch(
@@ -160,6 +131,7 @@ async function dashboardFetch(
   const res = await fetch(`${base}/api/${endpoint}`, {
     ...init,
     headers: { ...headers, ...(init?.headers || {}) },
+    credentials: 'include',
   });
   if (res.status === 401 && !retried) {
     // Reset and retry once

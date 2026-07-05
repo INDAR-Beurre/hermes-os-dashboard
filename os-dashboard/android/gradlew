@@ -1,0 +1,17 @@
+#!/bin/sh
+# Gradle wrapper script for Linux/Mac
+# Source: https://github.com/gradle/gradle/blob/v8.5.0/gradlew
+
+GRADLE_VERSION=8.5
+GRADLE_HOME="$HOME/.gradle/wrapper/dists/gradle-$GRADLE_VERSION-bin"
+CLASSPATH="$GRADLE_HOME/gradle-launcher-8.5.jar"
+
+if [ ! -f "$CLASSPATH" ]; then
+    echo "Downloading Gradle $GRADLE_VERSION..."
+    mkdir -p "$GRADLE_HOME"
+    curl -sL "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" -o /tmp/gradle.zip
+    unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/"
+    rm /tmp/gradle.zip
+fi
+
+exec java -cp "$CLASSPATH" org.gradle.launcher.GradleWrapperMain "$@"

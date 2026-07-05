@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:9119', changeOrigin: true },
+      '/auth': { target: 'http://127.0.0.1:9119', changeOrigin: true },
+      '/api/pty': { target: 'ws://127.0.0.1:9119', ws: true },
     },
   },
   build: {
