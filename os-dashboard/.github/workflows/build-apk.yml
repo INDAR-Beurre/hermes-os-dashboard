@@ -1,0 +1,56 @@
+name: Build Hermes OS APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'os-dashboard/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'os-dashboard/package-lock.json'
+
+      - name: Install & build web assets
+        working-directory: os-dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy assets to Android project
+        working-directory: os-dashboard
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -r hermes_cli/os_dashboard_dist/* android/app/src/main/assets/
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          if [ ! -f gradlew ]; then gradle wrapper --gradle-version 8.5; fi
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-os-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
