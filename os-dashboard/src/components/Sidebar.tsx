@@ -1,12 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MessageSquare, Clock, Database, Puzzle, Settings, Power } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Cpu, FileText, Settings, BookOpen, Clock, Power } from 'lucide-react';
 
 const navItems = [
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/sessions', label: 'Sessions', icon: MessageSquare },
-  { path: '/cron', label: 'Cron Jobs', icon: Clock },
-  { path: '/memory', label: 'Memory', icon: Database },
-  { path: '/skills', label: 'Skills', icon: Puzzle },
-  { path: '/settings', label: 'Settings', icon: Settings },
+  { path: '/kanban', label: 'Kanban', icon: Kanban },
+  { path: '/agents', label: 'Agents', icon: Cpu },
+  { path: '/logs', label: 'Logs', icon: FileText },
+  { path: '/config', label: 'Config', icon: Settings },
+  { path: '/vault', label: 'Vault', icon: BookOpen },
+  { path: '/cron', label: 'Cron', icon: Clock },
 ];
 
 interface SidebarProps {

@@ -2,23 +2,21 @@ import { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import Sidebar from './components/Sidebar';
-import ConnectPage from './pages/Connect';
-import SessionsPage from './pages/Sessions';
-import ChatPage from './pages/Chat';
-import CronPage from './pages/Cron';
-import MemoryPage from './pages/Memory';
-import SkillsPage from './pages/Skills';
-import SettingsPage from './pages/Settings';
+import Connect from './pages/Connect';
+import Sessions from './pages/Sessions';
+import Chat from './pages/Chat';
+import Cron from './pages/Cron';
+import Memory from './pages/Memory';
+import Skills from './pages/Skills';
+import Settings from './pages/Settings';
+import Dashboard from './pages/Dashboard';
+import Kanban from './pages/Kanban';
+import Agents from './pages/Agents';
+import Logs from './pages/Logs';
+import Config from './pages/Config';
+import Vault from './pages/Vault';
 import { useStore } from './store/useStore';
 import type { Session } from './store/useStore';
-
-const navItems = [
-  { path: '/sessions', label: 'Sessions', icon: 'MessageSquare' },
-  { path: '/cron', label: 'Cron Jobs', icon: 'Clock' },
-  { path: '/memory', label: 'Memory', icon: 'Database' },
-  { path: '/skills', label: 'Skills', icon: 'Puzzle' },
-  { path: '/settings', label: 'Settings', icon: 'Settings' },
-];
 
 export default function App() {
   const navigate = useNavigate();
@@ -28,7 +26,7 @@ export default function App() {
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
 
   if (!connection) {
-    return <ConnectPage onConnect={setConnection} />;
+    return <Connect onConnect={setConnection} />;
   }
 
   const handleSelectSession = (session: Session) => {
@@ -53,15 +51,20 @@ export default function App() {
       />
       <main className="flex-1 overflow-auto bg-[var(--background)]">
         {currentSession && location.pathname === '/chat' ? (
-          <ChatPage session={currentSession} onBack={handleBackToSessions} />
+          <Chat session={currentSession} onBack={handleBackToSessions} />
         ) : (
           <Routes>
-            <Route path="/sessions" element={<SessionsPage onSelectSession={handleSelectSession} />} />
-            <Route path="/cron" element={<CronPage />} />
-            <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
-            <Route path="/settings" element={<SettingsPage onDisconnect={() => { setConnection(null); navigate('/'); }} />} />
-            <Route path="/" element={<SessionsPage onSelectSession={handleSelectSession} />} />
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/sessions" element={<Sessions onSelectSession={handleSelectSession} />} />
+            <Route path="/kanban" element={<Kanban />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/config" element={<Config />} />
+            <Route path="/vault" element={<Vault />} />
+            <Route path="/cron" element={<Cron />} />
+            <Route path="/memory" element={<Memory />} />
+            <Route path="/skills" element={<Skills />} />
+            <Route path="/settings" element={<Settings onDisconnect={() => { setConnection(null); navigate('/'); }} />} />
           </Routes>
         )}
       </main>

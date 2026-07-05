@@ -13618,6 +13618,11 @@ def mount_spa(application: FastAPI):
 
     application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
+    # OS Dashboard — standalone agentic OS control panel
+    OS_DASHBOARD_DIST = Path(__file__).parent / "os_dashboard_dist"
+    if OS_DASHBOARD_DIST.exists():
+        application.mount("/os-dashboard", StaticFiles(directory=OS_DASHBOARD_DIST, html=True), name="os-dashboard")
+
     @application.get("/{full_path:path}")
     async def serve_spa(full_path: str, request: Request):
         prefix = _normalise_prefix(request.headers.get("x-forwarded-prefix"))
@@ -13642,6 +13647,33 @@ def mount_spa(application: FastAPI):
         ):
             return FileResponse(file_path)
         return _serve_index(prefix)
+
+
+# ---------------------------------------------------------------------------
+# Kanban API — read kanban.db for OS dashboard
+# ---------------------------------------------------------------------------
+
+HERMES_HOME_PATH = get_hermes_home()
+KANBAN_DB_PATH = HERMES_HOME_PATH / "kanban.db"
+
+
+@application.get("/api/kanban")
+async def get_kanban_tasks():
+    """Read kanban.db and return task list for the OS dashboard."""
+    import sqlite3
+    try:
+        db = sqlite3.connect(str(KANBAN_DB_PATH))
+        db.row_factory = sqlite3.Row
+        cur = db.execute(
+            "SELECT id, title, body, assignee, status, priority, "
+            "created_by, created_at, started_at, completed_at, workspace_path "
+            "FROM tasks ORDER BY priority DESC, created_at DESC LIMIT 500"
+        )
+        tasks = [dict(row) for row in cur.fetchall()]
+        db.close()
+    except Exception as e:
+        tasks = []
+    return {"tasks": tasks}
 
 
 # ---------------------------------------------------------------------------
