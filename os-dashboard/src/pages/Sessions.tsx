@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
-import { apiGetList } from '../api/hermes';
+import { dashboardGetList } from '../api/hermes';
 import type { Session } from '../store/useStore';
 import { Icon } from '../components/Icons';
 
@@ -15,15 +15,15 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
     setLoading(true);
     setError('');
     try {
-      const data = await apiGetList(connection, 'api/sessions');
+      const data = await dashboardGetList<any>(connection, 'sessions');
       const parsed: Session[] = (data || []).map((s: any) => ({
         id: s.id || '',
-        title: s.title || 'Untitled',
+        title: s.model || 'Hermes',
         model: s.model || 'Default',
         source: s.source || '',
-        messageCount: s.message_count || s.messageCount || 0,
+        messageCount: s.message_count || 0,
         isActive: s.ended_at == null,
-        preview: s.preview || '',
+        preview: '',
         startedAt: s.started_at || 0,
         endedAt: s.ended_at,
       }));
