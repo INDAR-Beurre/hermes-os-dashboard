@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { dashboardGet } from '../api/hermes';
+import { dashboardGet, dashboardGetList } from '../api/hermes';
 import { useStore } from '../store/useStore';
 import { Icon } from '../components/Icons';
 
@@ -14,11 +14,11 @@ export default function Dashboard() {
     if (!connection) return;
     Promise.all([
       dashboardGet(connection, 'system/stats'),
-      dashboardGet<any>(connection, 'sessions'),
+      dashboardGetList<any>(connection, 'sessions'),
       dashboardGet<any>(connection, 'profiles'),
     ]).then(([s, sess, prof]) => {
       setStats(s);
-      setSessions((sess?.sessions || []).slice(0, 8));
+      setSessions((sess || []).slice(0, 8));
       setProfiles(prof?.profiles || []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -44,19 +44,15 @@ export default function Dashboard() {
       <div style={styles.topBar}>
         <div>
           <h2 style={styles.pageTitle}>Dashboard</h2>
-          <p style={styles.pageSubtitle}>System overview · {stats?.hostname || 'Hermes'}</p>
+          <p style={styles.pageSubtitle}>{stats?.hostname || 'Hermes'} · {stats?.os || 'Linux'}</p>
         </div>
-        <div style={styles.versionBadge}>
-          v{stats?.hermes_version || '0.18.0'}
-        </div>
+        <div style={styles.versionBadge}>v{stats?.hermes_version || '0.18.0'}</div>
       </div>
 
-      {/* System stats */}
       <div style={styles.grid}>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>CPU</div>
           <div style={styles.statValue}>{stats?.cpu_count || '—'} cores</div>
-          <div style={styles.statSub}>{stats?.os || 'Linux'}</div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>Memory</div>
@@ -77,34 +73,18 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Activity */}
       <div style={styles.row}>
         <div style={styles.activityCard}>
-          <div style={styles.activityHeader}>
-            <Icon.Activity size={16} />
-            <span style={styles.activityLabel}>Activity</span>
-          </div>
+          <div style={styles.activityHeader}><Icon.Activity size={16} /><span style={styles.activityLabel}>Activity</span></div>
           <div style={styles.activityGrid}>
-            <div style={styles.activityItem}>
-              <div style={styles.activityValue}>{sessions.length}</div>
-              <div style={styles.activityLabel}>Sessions</div>
-            </div>
-            <div style={styles.activityItem}>
-              <div style={styles.activityValue}>{totalMessages.toLocaleString()}</div>
-              <div style={styles.activityLabel}>Messages</div>
-            </div>
-            <div style={styles.activityItem}>
-              <div style={styles.activityValue}>{(totalTokens / 1000).toFixed(1)}K</div>
-              <div style={styles.activityLabel}>Tokens</div>
-            </div>
+            <div style={styles.activityItem}><div style={styles.activityValue}>{sessions.length}</div><div style={styles.activityLabelSmall}>Sessions</div></div>
+            <div style={styles.activityItem}><div style={styles.activityValue}>{totalMessages.toLocaleString()}</div><div style={styles.activityLabelSmall}>Messages</div></div>
+            <div style={styles.activityItem}><div style={styles.activityValue}>{(totalTokens / 1000).toFixed(1)}K</div><div style={styles.activityLabelSmall}>Tokens</div></div>
           </div>
         </div>
 
         <div style={styles.profilesCard}>
-          <div style={styles.activityHeader}>
-            <Icon.Cpu size={16} />
-            <span style={styles.activityLabel}>Profiles · {profiles.filter((p: any) => p.gateway_running).length} active</span>
-          </div>
+          <div style={styles.activityHeader}><Icon.Cpu size={16} /><span style={styles.activityLabel}>Profiles · {profiles.filter((p: any) => p.gateway_running).length} active</span></div>
           <div style={styles.profileList}>
             {profiles.slice(0, 5).map((p: any) => (
               <div key={p.name} style={styles.profileRow}>
@@ -117,12 +97,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Sessions */}
       <div style={{ marginTop: 24 }}>
-        <div style={styles.sectionHeader}>
-          <Icon.MessageSquare size={16} />
-          <span style={styles.sectionTitle}>Recent Sessions</span>
-        </div>
+        <div style={styles.sectionHeader}><Icon.MessageSquare size={16} /><span style={styles.sectionTitle}>Recent Sessions</span></div>
         <div style={styles.table}>
           <div style={styles.tableHead}>
             <span style={{ ...styles.th, flex: 2 }}>Session</span>
@@ -136,10 +112,7 @@ export default function Dashboard() {
             const date = s.ended_at ? new Date(s.ended_at * 1000).toLocaleDateString() : 'active';
             return (
               <div key={s.id} style={{ ...styles.tr, animationDelay: `${i * 20}ms` }}>
-                <span style={{ ...styles.td, flex: 2 }}>
-                  <span style={styles.sessionId}>#{s.id.slice(-6)}</span>
-                  <span style={styles.sessionSource}>{s.source}</span>
-                </span>
+                <span style={{ ...styles.td, flex: 2 }}><span style={styles.sessionId}>#{s.id.slice(-6)}</span><span style={styles.sessionSource}>{s.source}</span></span>
                 <span style={{ ...styles.td, color: 'var(--gold)', fontFamily: 'monospace', fontSize: 12 }}>{s.model || 'default'}</span>
                 <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.message_count || 0}</span>
                 <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{totalT.toLocaleString()}</span>
@@ -147,9 +120,7 @@ export default function Dashboard() {
               </div>
             );
           })}
-          {sessions.length === 0 && (
-            <div style={styles.empty}>No sessions yet</div>
-          )}
+          {sessions.length === 0 && <div style={styles.empty}>No sessions yet</div>}
         </div>
       </div>
     </div>
@@ -169,10 +140,11 @@ const styles: Record<string, React.CSSProperties> = {
   statBar: { height: 3, background: 'var(--surfaceVariant)', borderRadius: 2, marginTop: 10, overflow: 'hidden' },
   statFill: { height: '100%', borderRadius: 2, transition: 'width 500ms ease' },
   statSub: { fontSize: 11, color: 'var(--textTertiary)', marginTop: 4 },
-  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 },
   activityCard: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', padding: '16px 20px' },
   activityHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
   activityLabel: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--textSecondary)' },
+  activityLabelSmall: { fontSize: 10, color: 'var(--textTertiary)', marginTop: 2 },
   activityGrid: { display: 'flex', gap: 24 },
   activityItem: { textAlign: 'center' },
   activityValue: { fontSize: 24, fontWeight: 700, color: 'var(--gold)', fontFamily: 'ui-monospace, monospace' },
@@ -187,7 +159,7 @@ const styles: Record<string, React.CSSProperties> = {
   table: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' },
   tableHead: { display: 'flex', padding: '10px 16px', background: 'rgba(212,175,55,0.04)', borderBottom: '1px solid var(--outline)' },
   th: { fontSize: 11, fontWeight: 600, color: 'var(--textSecondary)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  tr: { display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--outline)', animation: 'fadeIn 300ms ease both', transition: 'all 150ms ease' },
+  tr: { display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--outline)', animation: 'fadeIn 300ms ease both' },
   td: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   sessionId: { fontFamily: 'monospace', color: 'var(--textTertiary)', marginRight: 8, fontSize: 12 },
   sessionSource: { color: 'var(--textPrimary)' },

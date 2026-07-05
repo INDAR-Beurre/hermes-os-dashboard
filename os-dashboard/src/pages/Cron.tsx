@@ -17,7 +17,7 @@ export default function Cron() {
     setLoading(true);
     setError('');
     try {
-      const data = await dashboardGetList<any>(connection, 'cron-jobs');
+      const data = await dashboardGetList<any>(connection, 'cron/jobs');
       setJobs(data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load cron jobs');
