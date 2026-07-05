@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../hermes_cli/os_dashboard_dist',
+    outDir: 'dist',
     emptyOutDir: true,
   },
 })
