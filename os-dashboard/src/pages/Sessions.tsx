@@ -9,6 +9,8 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
 
   const loadSessions = useCallback(async () => {
     if (!connection) return;
@@ -19,7 +21,7 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
       const parsed: Session[] = (data || []).map((s: any) => ({
         id: s.id || '',
         title: s.model || 'Hermes',
-        model: s.model || 'Default',
+        model: s.model || 'default',
         source: s.source || '',
         messageCount: s.message_count || 0,
         isActive: s.ended_at == null,
@@ -37,19 +39,12 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  const createNewChat = () => {
-    const newSession: Session = {
-      id: `mob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: 'New Chat',
-      model: 'hermes-agent',
-      source: 'mobile',
-      messageCount: 0,
-      isActive: true,
-      preview: '',
-      startedAt: Date.now() / 1000,
-    };
-    onSelectSession(newSession);
-  };
+  const sources = [...new Set(sessions.map(s => s.source))];
+  const filtered = sessions.filter(s => {
+    if (sourceFilter && s.source !== sourceFilter) return false;
+    if (search && !s.id.toLowerCase().includes(search.toLowerCase()) && !s.model.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   if (!connection) return null;
 
@@ -58,104 +53,79 @@ export default function Sessions({ onSelectSession }: { onSelectSession: (s: Ses
       <div style={styles.topBar}>
         <div>
           <h2 style={styles.pageTitle}>Sessions</h2>
-          <p style={styles.pageSubtitle}>{connection.label}</p>
+          <p style={styles.pageSubtitle}>{sessions.length} total</p>
         </div>
-        <button style={styles.newChatBtn} onClick={createNewChat}>
-          <Icon.Plus size={18} />
-          New Chat
-        </button>
+        <div style={styles.actions}>
+          <div style={styles.searchBox}>
+            <Icon.Search size={14} />
+            <input
+              style={styles.searchInput}
+              placeholder="Search..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select style={styles.select} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
+            <option value="">All sources</option>
+            {sources.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button style={styles.refreshBtn} onClick={loadSessions}><Icon.Refresh size={14} /></button>
+        </div>
       </div>
 
-      {error && (
-        <div style={styles.errorBanner}>
-          <Icon.AlertCircle size={16} />
-          <span>{error}</span>
-          <button style={styles.retryBtn} onClick={loadSessions}>Retry</button>
-        </div>
-      )}
+      {error && <div style={styles.errorBanner}><Icon.AlertCircle size={14} /><span>{error}</span></div>}
 
-      <div style={styles.sessionList}>
-        {loading ? (
-          <div style={styles.center}><div style={styles.spinner} /></div>
-        ) : sessions.length === 0 ? (
-          <div style={styles.empty}>
-            <Icon.Chat size={48} />
-            <p style={styles.emptyText}>No sessions yet</p>
-            <p style={styles.emptyHint}>Start a new chat to begin</p>
-          </div>
-        ) : (
-          sessions.map((session, idx) => (
-            <button
-              key={session.id}
-              style={{ ...styles.sessionCard, animationDelay: `${idx * 30}ms` }}
-              onClick={() => onSelectSession(session)}
-            >
-              <div style={styles.sessionIcon}>
-                {session.isActive ? <div style={styles.activeDot} /> : <Icon.Chat size={18} />}
-              </div>
-              <div style={styles.sessionInfo}>
-                <div style={styles.sessionTitle}>{session.title}</div>
-                <div style={styles.sessionMeta}>{session.model} · {session.messageCount} messages</div>
-              </div>
-              <div style={styles.sessionRight}>
-                <span style={styles.sessionTime}>{formatTime(session.startedAt)}</span>
-                {!session.isActive && <span style={styles.endedTag}>ended</span>}
-              </div>
-              <Icon.ChevronRight size={16} />
-            </button>
-          ))
-        )}
+      <div style={styles.table}>
+        <div style={styles.tableHead}>
+          <span style={{ ...styles.th, flex: 2 }}>Session</span>
+          <span style={styles.th}>Source</span>
+          <span style={styles.th}>Model</span>
+          <span style={{ ...styles.th, textAlign: 'right' }}>Messages</span>
+          <span style={{ ...styles.th, textAlign: 'right' }}>Tokens</span>
+          <span style={styles.th}>Status</span>
+        </div>
+        {filtered.map((s, i) => {
+          const totalT = (s as any).input_tokens + (s as any).output_tokens || 0;
+          return (
+            <div key={s.id} style={{ ...styles.tr, animationDelay: `${i * 15}ms` }}>
+              <span style={{ ...styles.td, flex: 2 }}><span style={styles.sessionId}>#{s.id.slice(-8)}</span></span>
+              <span style={{ ...styles.td, textTransform: 'capitalize' }}>{s.source}</span>
+              <span style={{ ...styles.td, color: 'var(--gold)', fontFamily: 'monospace', fontSize: 12 }}>{s.model}</span>
+              <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{s.messageCount}</span>
+              <span style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{totalT.toLocaleString()}</span>
+              <span style={styles.td}>
+                {s.isActive
+                  ? <span style={styles.activeBadge}>active</span>
+                  : <span style={styles.endedBadge}>ended</span>
+                }
+              </span>
+            </div>
+          );
+        })}
+        {filtered.length === 0 && <div style={styles.empty}>No sessions found</div>}
       </div>
     </div>
   );
 }
 
-function formatTime(unix: number): string {
-  if (!unix) return '';
-  const d = new Date(unix * 1000);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 const styles: Record<string, React.CSSProperties> = {
   page: { display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--background)', animation: 'fadeIn 300ms ease' },
-  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '24px 24px 16px', borderBottom: '1px solid var(--outline)' },
-  pageTitle: { fontSize: 26, fontWeight: 700, margin: '0 0 4px 0', color: 'var(--textPrimary)', letterSpacing: '-0.01em' },
-  pageSubtitle: { fontSize: 13, color: 'var(--textSecondary)', margin: 0 },
-  newChatBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'var(--gold)', color: '#000', border: 'none', borderRadius: 'var(--radius-md)', padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  sessionList: { flex: 1, overflow: 'auto', padding: '8px 16px 16px' },
-  sessionCard: {
-    display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '14px 16px',
-    background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)',
-    cursor: 'pointer', transition: 'all 200ms ease', textAlign: 'left', color: 'var(--textPrimary)',
-    marginBottom: 8, animation: 'fadeIn 300ms ease both',
-  },
-  sessionIcon: {
-    width: 36, height: 36, borderRadius: 'var(--radius-sm)', background: 'var(--surfaceVariant)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--textSecondary)', flexShrink: 0,
-  },
-  activeDot: {
-    width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px rgba(34,197,94,0.4)',
-  },
-  sessionInfo: { flex: 1, minWidth: 0 },
-  sessionTitle: { fontSize: 14, fontWeight: 500, color: 'var(--textPrimary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  sessionMeta: { fontSize: 12, color: 'var(--textSecondary)', marginTop: 2 },
-  sessionRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 },
-  sessionTime: { fontSize: 12, color: 'var(--textTertiary)' },
-  endedTag: { fontSize: 10, color: 'var(--textTertiary)', background: 'var(--surfaceVariant)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em' },
-  center: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' },
-  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 0', color: 'var(--textTertiary)', gap: 8 },
-  emptyText: { fontSize: 15, fontWeight: 500, color: 'var(--textSecondary)', margin: 0 },
-  emptyHint: { fontSize: 13, color: 'var(--textTertiary)', margin: 0 },
-  errorBanner: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', fontSize: 13, color: 'var(--error)' },
-  retryBtn: { marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--error)', borderRadius: 'var(--radius-sm)', padding: '4px 10px', fontSize: 12, cursor: 'pointer' },
-  spinner: { width: 24, height: 24, border: '2px solid var(--outline)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 16px', borderBottom: '1px solid var(--outline)', gap: 16 },
+  pageTitle: { fontSize: 26, fontWeight: 700, color: 'var(--textPrimary)' },
+  pageSubtitle: { fontSize: 13, color: 'var(--textSecondary)' },
+  actions: { display: 'flex', gap: 8, alignItems: 'center' },
+  searchBox: { display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 12px' },
+  searchInput: { background: 'none', border: 'none', color: 'var(--textPrimary)', fontSize: 13, outline: 'none', width: 120 },
+  select: { background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 10px', color: 'var(--textPrimary)', fontSize: 13, outline: 'none' },
+  refreshBtn: { background: 'var(--surfaceVariant)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-md)', padding: '6px 10px', color: 'var(--textSecondary)', cursor: 'pointer', display: 'flex' },
+  errorBanner: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)', fontSize: 13, color: 'var(--error)', margin: '0 24px' },
+  table: { background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', margin: '16px 24px' },
+  tableHead: { display: 'flex', padding: '10px 16px', background: 'rgba(212,175,55,0.04)', borderBottom: '1px solid var(--outline)' },
+  th: { fontSize: 11, fontWeight: 600, color: 'var(--textSecondary)', textTransform: 'uppercase', letterSpacing: '0.06em' },
+  tr: { display: 'flex', padding: '10px 16px', borderBottom: '1px solid var(--outline)', animation: 'fadeIn 300ms ease both', cursor: 'pointer', transition: 'background 150ms ease' },
+  td: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  sessionId: { fontFamily: 'monospace', color: 'var(--textTertiary)', marginRight: 8, fontSize: 12 },
+  activeBadge: { fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'rgba(34,197,94,0.1)', color: 'var(--success)' },
+  endedBadge: { fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: 'var(--surfaceVariant)', color: 'var(--textTertiary)' },
+  empty: { padding: '32px 16px', textAlign: 'center', fontSize: 13, color: 'var(--textTertiary)' },
 };

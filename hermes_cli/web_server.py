@@ -13677,6 +13677,93 @@ async def get_kanban_tasks():
 
 
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Claude Code bridge — read CC sessions, allow Hermes to reply
+# ---------------------------------------------------------------------------
+
+_CC_SESSIONS_DIR = Path.home() / ".claude" / "projects"
+
+
+@app.get("/api/cc/sessions")
+async def get_cc_sessions():
+    """Return Claude Code sessions from ~/.claude/projects/."""
+    sessions = []
+    if not _CC_SESSIONS_DIR.exists():
+        return {"sessions": []}
+    for project_dir in _CC_SESSIONS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for session_file in project_dir.glob("*.jsonl"):
+            try:
+                messages = []
+                with open(session_file, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            event = json.loads(line)
+                            if event.get("type") == "message":
+                                role = event.get("role", "")
+                                content = ""
+                                if isinstance(event.get("content"), str):
+                                    content = event["content"]
+                                elif isinstance(event.get("content"), list):
+                                    for block in event["content"]:
+                                        if isinstance(block, dict) and block.get("type") == "text":
+                                            content += block.get("text", "")
+                                messages.append({
+                                    "role": role,
+                                    "content": content,
+                                    "timestamp": event.get("timestamp", 0),
+                                })
+                        except json.JSONDecodeError:
+                            continue
+                if messages:
+                    sessions.append({
+                        "id": session_file.stem,
+                        "project": project_dir.name,
+                        "startTime": messages[0]["timestamp"],
+                        "messages": messages[-20:],
+                        "lastActivity": messages[-1]["timestamp"],
+                    })
+            except Exception:
+                continue
+    sessions.sort(key=lambda s: s["lastActivity"], reverse=True)
+    return {"sessions": sessions[:50]}
+
+
+@app.post("/api/cc/sessions/{session_id}/reply")
+async def cc_session_reply(session_id: str, body: dict):
+    """Append a Hermes reply to a CC session (best-effort)."""
+    reply_text = body.get("message", "")
+    if not reply_text:
+        return {"ok": False}
+    for project_dir in _CC_SESSIONS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        session_file = project_dir / f"{session_id}.jsonl"
+        if session_file.exists():
+            try:
+                event = {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": reply_text,
+                    "timestamp": time.time(),
+                    "source": "hermes-os-bridge",
+                }
+                with open(session_file, "a") as f:
+                    f.write(json.dumps(event) + "\n")
+                return {"ok": True}
+            except Exception:
+                pass
+    return {"ok": False}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard theme endpoints
 # Dashboard theme endpoints
 # ---------------------------------------------------------------------------
 

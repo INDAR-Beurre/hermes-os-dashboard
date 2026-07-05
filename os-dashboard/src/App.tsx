@@ -58,6 +58,7 @@ export default function App() {
             <Route path="/sessions" element={<Sessions onSelectSession={handleSelectSession} />} />
             <Route path="/kanban" element={<Kanban />} />
             <Route path="/agents" element={<Agents />} />
+            <Route path="/cc" element={<ClaudeCode />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/config" element={<Config />} />
             <Route path="/vault" element={<Vault />} />

@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, Kanban, Cpu, FileText, Settings, BookOpen, Clock, Power } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Cpu, FileText, Settings, BookOpen, Clock, Power, Cpu as CpuIcon } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/sessions', label: 'Sessions', icon: MessageSquare },
   { path: '/kanban', label: 'Kanban', icon: Kanban },
-  { path: '/agents', label: 'Agents', icon: Cpu },
+  { path: '/agents', label: 'Agents', icon: CpuIcon },
+  { path: '/cc', label: 'Claude Code', icon: CpuIcon },
   { path: '/logs', label: 'Logs', icon: FileText },
   { path: '/config', label: 'Config', icon: Settings },
   { path: '/vault', label: 'Vault', icon: BookOpen },
